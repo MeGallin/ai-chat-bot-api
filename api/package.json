@@ -1,0 +1,16 @@
+{
+  "name": "api",
+  "version": "1.0.0",
+  "description": "Node Chat bot",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "nodemon server.mjs"
+  },
+  "author": "GG Allin",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.1.0",
+    "nodemon": "^3.1.10"
+  }
+}
