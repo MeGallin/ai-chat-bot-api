@@ -1,7 +1,8 @@
+import Recorder from "./components/recorder"
 function App() {
   return (
-    <div>
-      <h1>Hello World</h1>
+    <div style={{display:"flex", justifyContent:"center", alignItems:"center", height:"100vh"}}>
+      <Recorder/>
     </div>
   )
 }
