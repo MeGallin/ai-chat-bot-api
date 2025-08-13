@@ -7,18 +7,22 @@
   "scripts": {
     "start": "nodemon server.mjs",
     "dev": "nodemon server.mjs",
+    "realtime": "nodemon realtime-server.mjs",
+    "start-realtime": "nodemon realtime-server.mjs",
     "audit": "npm audit",
     "audit-fix": "npm audit fix"
   },
   "author": "GG Allin",
   "license": "ISC",
   "dependencies": {
+    "@openai/realtime-api-beta": "github:openai/openai-realtime-api-beta",
     "body-parser": "^2.2.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.0",
     "express": "^5.1.0",
     "express-rate-limit": "^7.5.1",
     "nodemon": "^3.1.10",
-    "openai": "^5.9.0"
+    "openai": "^5.9.0",
+    "ws": "^8.18.3"
   }
 }

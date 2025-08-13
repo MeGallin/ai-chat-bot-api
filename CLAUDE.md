@@ -49,16 +49,23 @@ ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 
 ## Development Commands
 
-### API Server
+### 🚀 Realtime API Server (RECOMMENDED)
 ```bash
 cd api
 npm install
-npm start        # Start with nodemon
+npm run realtime        # Start realtime WebSocket server
+npm run start-realtime  # Alternative realtime command
+```
+
+### 📞 Legacy API Server (for comparison)
+```bash
+cd api
+npm start        # Start legacy REST server
 npm run dev      # Alternative dev command
 npm audit        # Check for vulnerabilities
 ```
 
-### Client
+### Client (React + Vite)
 ```bash
 cd client
 npm install
@@ -67,6 +74,12 @@ npm run build    # Build for production
 npm run preview  # Preview production build
 npm run lint     # Run ESLint
 ```
+
+### 🔄 Quick Start (Dual Mode)
+1. **Start Realtime Server**: `cd api && npm run realtime`
+2. **Start Client**: `cd client && npm run dev`  
+3. **Open Browser**: Navigate to `http://localhost:5173`
+4. **Switch Modes**: Toggle between Legacy and Realtime in the UI
 
 ## Project Structure
 ```
@@ -92,10 +105,69 @@ npm run lint     # Run ESLint
 4. **Speech Output**: Response converted to speech → Auto-plays audio
 5. **Ready**: Listening resumes automatically after playbook
 
+## 🚀 REVOLUTIONARY REALTIME FEATURES (2024-2025)
+
+### **⚡ OpenAI Realtime API Integration**
+- **TRUE VOICE INTERRUPTION**: Stop AI mid-sentence with `client.cancelResponse()`
+- **Streaming Audio**: Ultra-low latency real-time audio chunks
+- **Voice Activity Detection (VAD)**: Automatic conversation flow with configurable thresholds
+- **WebSocket-Based**: Single persistent connection for all audio streaming
+- **Conversation State Management**: Built-in conversation history and context
+- **Real-time Function Calling**: Tools that execute while AI is speaking
+- **Live Analytics**: Track interruptions, turn durations, and conversation metrics
+
+### **🔥 Revolutionary vs Legacy Comparison**
+
+| Feature | 📞 Legacy Mode | ⚡ Realtime Mode |
+|---------|---------------|------------------|
+| Voice Interruption | ❌ Voice commands only | ✅ True real-time interruption |
+| Response Latency | ❌ Multiple API calls | ✅ Single WebSocket stream |
+| Voice Activity | ❌ Manual trigger only | ✅ Automatic VAD detection |
+| Audio Processing | ❌ Batch generation | ✅ Streaming audio chunks |
+| Conversation State | ❌ Client-side only | ✅ Built-in state management |
+| Function Calling | ❌ Not integrated | ✅ Real-time tool execution |
+| Analytics | ❌ Basic metrics | ✅ Advanced conversation analytics |
+| Natural Flow | ❌ Start-stop interactions | ✅ Continuous conversation |
+
+### **🎯 How Realtime Mode Works**
+
+1. **WebSocket Connection**: Direct streaming connection to OpenAI Realtime API
+2. **Real-time Audio Processing**: Audio worklet processes microphone input to PCM16 format
+3. **Voice Activity Detection**: Server automatically detects speech start/end
+4. **Streaming Response**: AI generates and streams audio response in real-time chunks
+5. **Interruption Handling**: User can interrupt AI mid-sentence naturally
+6. **Conversation Continuity**: Built-in state management maintains conversation context
+
+### **🛠️ Advanced Features**
+
+#### **Real-time Function Calling**
+- `get_current_time`: Get current date/time in various formats
+- `analyze_conversation_metrics`: Real-time conversation analytics
+- `set_reminder`: Schedule reminders with browser notifications
+
+#### **Interruption Analytics**
+- Total conversation turns
+- Interruption count and rate
+- Average response time
+- Conversation duration
+- Real-time metrics dashboard
+
+#### **Voice Activity Detection Settings**
+- Threshold: `0.5` (configurable)
+- Prefix padding: `300ms`
+- Silence duration: `800ms`
+- Automatic turn detection
+
 ## Recent Updates (2024-2025)
 
+- 🚀 **REVOLUTIONARY**: Added OpenAI Realtime API with true voice interruption
+- ⚡ **GAME-CHANGER**: Streaming audio with ultra-low latency
+- 🎤 **ADVANCED**: Voice Activity Detection with automatic conversation flow
+- 🧠 **INTELLIGENT**: Built-in conversation state management
+- 📊 **ANALYTICS**: Real-time interruption and conversation metrics
+- 🛠️ **TOOLS**: Real-time function calling capabilities
+- 🎯 **DUAL-MODE**: Compare legacy vs revolutionary side-by-side
 - ✅ Updated to latest React 19 and Vite 7.1.2
 - ✅ Security vulnerabilities patched
 - ✅ Enhanced browser compatibility warnings
 - ✅ Improved error handling and user guidance
-- ✅ Added comprehensive voice commands
