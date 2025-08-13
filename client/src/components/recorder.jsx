@@ -18,6 +18,58 @@ const Recorder = () => {
   // Auto-generate audio after silence delay (in milliseconds)
   const SILENCE_DELAY = 3000; // 3 seconds
 
+  const clearAutoGenerateTimeout = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+      setTimeoutActive(false);
+    }
+  }, []);
+
+  const handleGenerateAudio = useCallback(
+    async (textToSend) => {
+      if (!textToSend || !textToSend.trim()) {
+        console.log('No transcript to process');
+        return;
+      }
+
+      // Clear any pending timeout
+      clearAutoGenerateTimeout();
+      setIsProcessing(true);
+
+      // Stop listening while processing to prevent picking up our own audio
+      SpeechRecognition.stopListening();
+
+      try {
+        console.log('🔄 Sending request to server...');
+        const audio = await axios.post(
+          'http://localhost:8000',
+          { text: textToSend },
+          {
+            responseType: 'blob',
+          },
+        );
+
+        console.log('✅ Received audio response:', audio.data);
+        console.log('Audio blob size:', audio.data.size, 'bytes');
+
+        const url = window.URL.createObjectURL(
+          new Blob([audio.data], { type: 'audio/mpeg' }),
+        );
+        console.log('🎵 Created audio URL:', url);
+
+        setAudioUrl(url);
+        console.log('✅ Audio URL set successfully');
+      } catch (error) {
+        console.error('❌ Error downloading audio:', error);
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [clearAutoGenerateTimeout],
+  );
+
+  // Define commands using functions that are already defined
   const commands = [
     {
       command: ['clear', 'reset', 'delete'],
@@ -30,9 +82,15 @@ const Recorder = () => {
     },
     {
       command: ['send', 'submit', 'generate', 'over'],
-      callback: () => {
+      callback: ({ finalTranscript, transcript, resetTranscript }) => {
         clearAutoGenerateTimeout();
-        handleGenerateAudio();
+        const textToSend = finalTranscript || transcript;
+        if (textToSend) {
+          handleGenerateAudio(textToSend).then(() => {
+            resetTranscript();
+            lastTranscriptRef.current = '';
+          });
+        }
       },
     },
     {
@@ -81,332 +139,268 @@ const Recorder = () => {
       !isPlayingAudio &&
       listening
     ) {
-      // Transcript has changed, reset the timeout
+      console.log('📝 New final transcript detected:', finalTranscript);
+      lastTranscriptRef.current = finalTranscript;
+
+      // Clear any existing timeout
       clearAutoGenerateTimeout();
 
-      console.log('📝 New final transcript detected:', finalTranscript);
-
-      // Set a new timeout to auto-generate after silence
-      setTimeoutActive(true);
+      // Set new timeout for auto-generation
       timeoutRef.current = setTimeout(() => {
-        if (
-          finalTranscript.trim() &&
-          !isProcessing &&
-          !isPlayingAudio &&
-          listening
-        ) {
-          console.log('🔄 Auto-generating audio after silence...');
-          handleGenerateAudio();
-        }
+        console.log(
+          `⏰ ${SILENCE_DELAY}ms silence detected, auto-generating audio...`,
+        );
         setTimeoutActive(false);
+        handleGenerateAudio(finalTranscript).then(() => {
+          // Clear transcript and reference after processing
+          resetTranscript();
+          lastTranscriptRef.current = '';
+          console.log('🧹 Auto-generation complete, transcript cleared');
+        });
       }, SILENCE_DELAY);
 
-      lastTranscriptRef.current = finalTranscript;
+      setTimeoutActive(true);
+      console.log(`⏱️ Auto-generation timeout set for ${SILENCE_DELAY}ms`);
     }
-  }, [finalTranscript, isProcessing, isPlayingAudio, listening, handleGenerateAudio]);
+  }, [
+    finalTranscript,
+    isProcessing,
+    isPlayingAudio,
+    listening,
+    clearAutoGenerateTimeout,
+    handleGenerateAudio,
+    resetTranscript,
+    SILENCE_DELAY,
+  ]);
 
-  // Cleanup timeout on unmount
+  // Add audio event handlers to track playback state
   useEffect(() => {
-    return () => clearAutoGenerateTimeout();
-  }, []);
+    if (audioUrl && audioRef.current) {
+      const audio = audioRef.current;
 
-  const clearAutoGenerateTimeout = () => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-      setTimeoutActive(false);
+      const handlePlay = () => {
+        console.log('🎵 Audio playback started');
+        setIsPlayingAudio(true);
+      };
+
+      const handleEnded = () => {
+        console.log('🎵 Audio playback ended');
+        setIsPlayingAudio(false);
+
+        // Resume listening after a short delay to prevent immediate pickup
+        setTimeout(() => {
+          if (
+            browserSupportsSpeechRecognition &&
+            browserSupportsContinuousListening
+          ) {
+            console.log('🎤 Resuming speech recognition after audio playback');
+            SpeechRecognition.startListening({ continuous: true });
+          }
+        }, 2000); // 2 second delay to ensure audio is fully finished
+      };
+
+      const handleError = (e) => {
+        console.error('🎵 Audio playback error:', e);
+        setIsPlayingAudio(false);
+        // Resume listening even on error
+        setTimeout(() => {
+          if (
+            browserSupportsSpeechRecognition &&
+            browserSupportsContinuousListening
+          ) {
+            SpeechRecognition.startListening({ continuous: true });
+          }
+        }, 1000);
+      };
+
+      audio.addEventListener('play', handlePlay);
+      audio.addEventListener('ended', handleEnded);
+      audio.addEventListener('error', handleError);
+
+      return () => {
+        audio.removeEventListener('play', handlePlay);
+        audio.removeEventListener('ended', handleEnded);
+        audio.removeEventListener('error', handleError);
+      };
+    }
+  }, [
+    audioUrl,
+    browserSupportsSpeechRecognition,
+    browserSupportsContinuousListening,
+  ]);
+
+  const handleMicToggle = () => {
+    if (listening) {
+      clearAutoGenerateTimeout();
+      SpeechRecognition.stopListening();
+    } else {
+      SpeechRecognition.startListening({ continuous: true });
     }
   };
 
-  const handleGenerateAudio = useCallback(async () => {
-    const currentTranscript = finalTranscript || transcript;
-    if (!currentTranscript.trim()) {
-      console.log('No transcript to process');
-      return;
-    }
-
-    // Clear any pending timeout
-    clearAutoGenerateTimeout();
-    setIsProcessing(true);
-
-    // Stop listening while processing to prevent picking up our own audio
-    SpeechRecognition.stopListening();
-
-    try {
-      console.log('🔄 Sending request to server...');
-      const audio = await axios.post(
-        'http://localhost:8000',
-        { text: currentTranscript },
-        {
-          responseType: 'blob',
-        },
-      );
-
-      console.log('✅ Received audio response:', audio.data);
-      console.log('Audio blob size:', audio.data.size, 'bytes');
-
-      const url = window.URL.createObjectURL(
-        new Blob([audio.data], { type: 'audio/mpeg' }),
-      );
-      console.log('🎵 Created audio URL:', url);
-
-      setAudioUrl(url);
-      console.log('✅ Audio URL set successfully');
-
-      // Clear transcript after successful processing to prevent loops
-      resetTranscript();
-      lastTranscriptRef.current = '';
-      console.log('🧹 Transcript cleared after processing');
-    } catch (error) {
-      console.error('❌ Error downloading audio:', error);
-      // Resume listening even if there's an error
-      setTimeout(() => {
-        if (
-          browserSupportsSpeechRecognition &&
-          browserSupportsContinuousListening
-        ) {
-          SpeechRecognition.startListening({ continuous: true });
-        }
-      }, 1000);
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [finalTranscript, transcript, resetTranscript, browserSupportsSpeechRecognition, browserSupportsContinuousListening]);
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   if (!browserSupportsSpeechRecognition) {
-    return (
-      <div style={styles.container}>
-        <div style={styles.errorContainer}>
-          <h3 style={styles.errorTitle}>Speech Recognition Not Supported</h3>
-          <p style={styles.errorText}>
-            Your browser doesn't support speech recognition. This feature works best in:
-          </p>
-          <ul style={styles.errorList}>
-            <li>Google Chrome (recommended)</li>
-            <li>Safari (macOS/iOS)</li>
-            <li>Firefox (limited support)</li>
-          </ul>
-          <p style={styles.errorText}>
-            <strong>Note:</strong> Microsoft Edge has limited support for this feature.
-            For the best experience, please use Google Chrome.
-          </p>
-          <p style={styles.errorText}>
-            You can still type your messages directly to the API at <code>localhost:8000</code>
-          </p>
-        </div>
-      </div>
-    );
+    return <span>Browser doesn't support speech recognition.</span>;
   }
 
   return (
-    <div style={styles.container}>
-      {/* Microphone Icon with Visual Feedback */}
-      <div style={styles.micContainer}>
-        {listening ? (
-          <MicIcon style={{ ...styles.micIcon, color: '#ff4444' }} />
-        ) : (
-          <MicNoneIcon style={{ ...styles.micIcon, color: '#999' }} />
-        )}
-      </div>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        padding: '20px',
+        fontFamily: 'Arial, sans-serif',
+      }}
+    >
+      <h1>AI Chat Bot</h1>
 
-      {/* Status and Instructions */}
-      <div style={styles.statusContainer}>
-        <p style={styles.statusText}>
-          <strong>Status:</strong>{' '}
-          {isProcessing
-            ? '🤖 Processing...'
-            : isPlayingAudio
-            ? '🔊 Playing AI response...'
-            : timeoutActive
-            ? '⏱️ Auto-generating in 3s...'
-            : listening
-            ? '🎤 Listening...'
-            : '🔇 Not listening'}
-        </p>
-        <p style={styles.instructionsText}>
-          Speak naturally • Auto-generates after 3s of silence • Say{' '}
-          <em>"clear"</em> to reset
+      {/* Microphone Button */}
+      <button
+        onClick={handleMicToggle}
+        style={{
+          background: listening ? '#ff4444' : '#4CAF50',
+          border: 'none',
+          borderRadius: '50%',
+          width: '80px',
+          height: '80px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          margin: '20px',
+          transition: 'all 0.3s ease',
+          transform: listening ? 'scale(1.1)' : 'scale(1)',
+          boxShadow: listening
+            ? '0 0 20px rgba(255, 68, 68, 0.5)'
+            : '0 0 10px rgba(76, 175, 80, 0.3)',
+        }}
+        disabled={isProcessing}
+      >
+        {listening ? (
+          <MicIcon style={{ color: 'white', fontSize: '32px' }} />
+        ) : (
+          <MicNoneIcon style={{ color: 'white', fontSize: '32px' }} />
+        )}
+      </button>
+
+      {/* Status Indicators */}
+      <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+        <p>
+          Status: {listening ? '🎤 Listening...' : '🔇 Not listening'}
+          {isProcessing && ' | 🔄 Processing...'}
+          {timeoutActive &&
+            ` | ⏱️ Auto-generating in ${SILENCE_DELAY / 1000}s...`}
+          {isPlayingAudio && ' | 🎵 Playing audio...'}
         </p>
       </div>
 
       {/* Transcript Display */}
-      {transcript && (
-        <div style={styles.transcriptContainer}>
-          <h4 style={styles.transcriptLabel}>Transcript:</h4>
-          <p style={styles.transcriptText}>{transcript}</p>
-        </div>
-      )}
+      <div
+        style={{
+          minHeight: '100px',
+          width: '80%',
+          maxWidth: '600px',
+          border: '1px solid #ccc',
+          borderRadius: '8px',
+          padding: '15px',
+          backgroundColor: '#f9f9f9',
+          marginBottom: '20px',
+          overflowY: 'auto',
+        }}
+      >
+        <h3>Transcript:</h3>
+        <p style={{ margin: '0', lineHeight: '1.5' }}>
+          {transcript || 'Start speaking to see your words here...'}
+        </p>
+      </div>
 
-      {/* Processing Indicator */}
-      {isProcessing && (
-        <div style={styles.processingContainer}>
-          <p style={styles.processingText}>
-            🤖 Generating AI response and audio...
-          </p>
-        </div>
-      )}
+      {/* Manual Generate Button */}
+      <button
+        onClick={() => {
+          const textToSend = finalTranscript || transcript;
+          if (textToSend) {
+            clearAutoGenerateTimeout();
+            handleGenerateAudio(textToSend).then(() => {
+              resetTranscript();
+              lastTranscriptRef.current = '';
+            });
+          }
+        }}
+        disabled={isProcessing || !transcript.trim()}
+        style={{
+          backgroundColor: isProcessing ? '#cccccc' : '#2196F3',
+          color: 'white',
+          border: 'none',
+          borderRadius: '25px',
+          padding: '12px 24px',
+          fontSize: '16px',
+          cursor: isProcessing ? 'not-allowed' : 'pointer',
+          marginBottom: '20px',
+          transition: 'background-color 0.3s ease',
+        }}
+      >
+        {isProcessing ? '🔄 Generating...' : '🎙️ Generate Audio'}
+      </button>
 
       {/* Audio Player */}
       {audioUrl && (
-        <div style={styles.audioContainer}>
-          <h4 style={styles.audioLabel}>AI Response:</h4>
+        <div style={{ marginTop: '20px', textAlign: 'center' }}>
+          <h3>Generated Audio:</h3>
           <audio
             ref={audioRef}
-            src={audioUrl}
             controls
+            src={audioUrl}
+            style={{ width: '100%', maxWidth: '400px' }}
             autoPlay
-            style={styles.audioPlayer}
-            onPlay={() => {
-              setIsPlayingAudio(true);
-              SpeechRecognition.stopListening();
-              console.log('🎵 Audio started playing - pausing listening');
-            }}
-            onEnded={() => {
-              setIsPlayingAudio(false);
-              console.log(
-                '🎵 Audio finished playing - waiting before resuming listening',
-              );
-              // Add a longer delay before resuming listening to ensure audio is completely finished
-              setTimeout(() => {
-                if (
-                  browserSupportsSpeechRecognition &&
-                  browserSupportsContinuousListening
-                ) {
-                  console.log('🎤 Resuming listening after audio finished');
-                  SpeechRecognition.startListening({ continuous: true });
-                }
-              }, 2000); // 2 second delay
-            }}
-            onPause={() => {
-              // Only update state if user manually pauses. Don't resume listening.
-              // The 'onEnded' event will handle resuming listening when the audio finishes naturally.
-              if (audioRef.current && !audioRef.current.ended) {
-                setIsPlayingAudio(false);
-                console.log('🎵 Audio paused by user.');
-              }
-            }}
           />
         </div>
       )}
+
+      {/* Voice Commands Help */}
+      <div
+        style={{
+          marginTop: '30px',
+          padding: '20px',
+          backgroundColor: '#f0f8ff',
+          borderRadius: '8px',
+          width: '80%',
+          maxWidth: '600px',
+        }}
+      >
+        <h3>Voice Commands:</h3>
+        <ul style={{ textAlign: 'left', margin: '10px 0' }}>
+          <li>
+            <strong>"Send"</strong> or <strong>"Generate"</strong> - Generate
+            audio from current transcript
+          </li>
+          <li>
+            <strong>"Clear"</strong> or <strong>"Reset"</strong> - Clear
+            transcript and audio
+          </li>
+          <li>
+            <strong>"Start"</strong> or <strong>"Begin"</strong> - Start
+            listening
+          </li>
+          <li>
+            <strong>"Stop"</strong> or <strong>"Pause"</strong> - Stop listening
+          </li>
+        </ul>
+        <p style={{ fontSize: '14px', color: '#666', margin: '10px 0 0 0' }}>
+          💡 Audio will auto-generate after {SILENCE_DELAY / 1000} seconds of
+          silence
+        </p>
+      </div>
     </div>
   );
-};
-
-// Improved styles
-const styles = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: '30px',
-    maxWidth: '600px',
-    margin: '0 auto',
-    fontFamily:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  },
-  micContainer: {
-    padding: '20px',
-    borderRadius: '50%',
-    backgroundColor: '#f8f9fa',
-    marginBottom: '20px',
-    transition: 'all 0.3s ease',
-  },
-  micIcon: {
-    fontSize: '100px',
-    transition: 'color 0.3s ease',
-  },
-  statusContainer: {
-    textAlign: 'center',
-    marginBottom: '20px',
-  },
-  statusText: {
-    fontSize: '18px',
-    margin: '0 0 10px 0',
-    color: '#333',
-  },
-  instructionsText: {
-    fontSize: '14px',
-    color: '#666',
-    margin: 0,
-    lineHeight: '1.4',
-  },
-  transcriptContainer: {
-    width: '100%',
-    margin: '20px 0',
-    padding: '20px',
-    border: '2px solid #e9ecef',
-    borderRadius: '12px',
-    backgroundColor: '#f8f9fa',
-  },
-  transcriptLabel: {
-    margin: '0 0 10px 0',
-    color: '#495057',
-    fontSize: '16px',
-  },
-  transcriptText: {
-    margin: 0,
-    fontSize: '16px',
-    lineHeight: '1.5',
-    color: '#212529',
-  },
-  processingContainer: {
-    margin: '20px 0',
-    padding: '15px',
-    backgroundColor: '#fff3cd',
-    border: '1px solid #ffeaa7',
-    borderRadius: '8px',
-  },
-  processingText: {
-    margin: 0,
-    color: '#856404',
-    fontSize: '14px',
-    textAlign: 'center',
-  },
-  audioContainer: {
-    width: '100%',
-    margin: '20px 0',
-    padding: '20px',
-    border: '2px solid #d4edda',
-    borderRadius: '12px',
-    backgroundColor: '#f8fff9',
-  },
-  audioLabel: {
-    margin: '0 0 15px 0',
-    color: '#155724',
-    fontSize: '16px',
-  },
-  audioPlayer: {
-    width: '100%',
-  },
-  errorContainer: {
-    width: '100%',
-    maxWidth: '500px',
-    margin: '20px 0',
-    padding: '30px',
-    border: '2px solid #f5c6cb',
-    borderRadius: '12px',
-    backgroundColor: '#f8d7da',
-    textAlign: 'center',
-  },
-  errorTitle: {
-    color: '#721c24',
-    marginBottom: '15px',
-    fontSize: '20px',
-  },
-  errorText: {
-    color: '#721c24',
-    fontSize: '16px',
-    lineHeight: '1.5',
-    marginBottom: '15px',
-  },
-  errorList: {
-    color: '#721c24',
-    textAlign: 'left',
-    maxWidth: '300px',
-    margin: '15px auto',
-    fontSize: '16px',
-  },
 };
 
 export default Recorder;
