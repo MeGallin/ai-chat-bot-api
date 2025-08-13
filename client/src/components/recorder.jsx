@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import SpeechRecognition, {
   useSpeechRecognition,
 } from 'react-speech-recognition';
@@ -50,7 +50,6 @@ const Recorder = () => {
 
   const {
     transcript,
-    interimTranscript,
     finalTranscript,
     listening,
     resetTranscript,
@@ -104,7 +103,7 @@ const Recorder = () => {
 
       lastTranscriptRef.current = finalTranscript;
     }
-  }, [finalTranscript, isProcessing, isPlayingAudio, listening]);
+  }, [finalTranscript, isProcessing, isPlayingAudio, listening, handleGenerateAudio]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -119,7 +118,7 @@ const Recorder = () => {
     }
   };
 
-  const handleGenerateAudio = async () => {
+  const handleGenerateAudio = useCallback(async () => {
     const currentTranscript = finalTranscript || transcript;
     if (!currentTranscript.trim()) {
       console.log('No transcript to process');
@@ -172,12 +171,29 @@ const Recorder = () => {
     } finally {
       setIsProcessing(false);
     }
-  };
+  }, [finalTranscript, transcript, resetTranscript, browserSupportsSpeechRecognition, browserSupportsContinuousListening]);
 
   if (!browserSupportsSpeechRecognition) {
     return (
       <div style={styles.container}>
-        <span>Browser doesn't support speech recognition.</span>
+        <div style={styles.errorContainer}>
+          <h3 style={styles.errorTitle}>Speech Recognition Not Supported</h3>
+          <p style={styles.errorText}>
+            Your browser doesn't support speech recognition. This feature works best in:
+          </p>
+          <ul style={styles.errorList}>
+            <li>Google Chrome (recommended)</li>
+            <li>Safari (macOS/iOS)</li>
+            <li>Firefox (limited support)</li>
+          </ul>
+          <p style={styles.errorText}>
+            <strong>Note:</strong> Microsoft Edge has limited support for this feature.
+            For the best experience, please use Google Chrome.
+          </p>
+          <p style={styles.errorText}>
+            You can still type your messages directly to the API at <code>localhost:8000</code>
+          </p>
+        </div>
       </div>
     );
   }
@@ -362,6 +378,34 @@ const styles = {
   },
   audioPlayer: {
     width: '100%',
+  },
+  errorContainer: {
+    width: '100%',
+    maxWidth: '500px',
+    margin: '20px 0',
+    padding: '30px',
+    border: '2px solid #f5c6cb',
+    borderRadius: '12px',
+    backgroundColor: '#f8d7da',
+    textAlign: 'center',
+  },
+  errorTitle: {
+    color: '#721c24',
+    marginBottom: '15px',
+    fontSize: '20px',
+  },
+  errorText: {
+    color: '#721c24',
+    fontSize: '16px',
+    lineHeight: '1.5',
+    marginBottom: '15px',
+  },
+  errorList: {
+    color: '#721c24',
+    textAlign: 'left',
+    maxWidth: '300px',
+    margin: '15px auto',
+    fontSize: '16px',
   },
 };
 

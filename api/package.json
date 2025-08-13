@@ -5,7 +5,10 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "nodemon server.mjs"
+    "start": "nodemon server.mjs",
+    "dev": "nodemon server.mjs",
+    "audit": "npm audit",
+    "audit-fix": "npm audit fix"
   },
   "author": "GG Allin",
   "license": "ISC",
